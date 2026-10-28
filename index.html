@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurboType | Carreras en Familia</title>
+
+<!-- Librería PeerJS para conectar computadoras directamente -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+:root {
+  --blue: #3478f6;
+  --dark: #18243c;
+  --green: #22c55e;
+  --gray: #64748b;
+}
+
+body {
+  margin: 0;
+  background: #eef3fb;
+  color: var(--dark);
+  font-family: Arial, sans-serif;
+}
+
+header {
+  background: white;
+  padding: 18px 6%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 3px 15px #0000000c;
+}
+
+.logo {
+  font-size: 25px;
+  font-weight: 900;
+  color: var(--blue);
+}
+
+.logo span { color: #ffad32; }
+
+main {
+  width: min(900px, 94%);
+  margin: 30px auto;
+}
+
+.panel {
+  background: white;
+  padding: 24px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 5px 20px #2030500c;
+}
+
+.center { text-align: center; }
+
+input, button, textarea {
+  font: inherit;
+  border-radius: 10px;
+}
+
+input, textarea {
+  width: 100%;
+  border: 2px solid #dce5f2;
+  padding: 13px;
+  margin: 10px 0;
+  outline: none;
+}
+
+button {
+  padding: 13px 18px;
+  border: 0;
+  cursor: pointer;
+  font-weight: bold;
+  background: var(--blue);
+  color: white;
+  margin-top: 8px;
+}
+
+button.green { background: var(--green); color: white; }
+button.secondary { background: #e9f0ff; color: #2457b5; }
+
+.hidden { display: none !important; }
+
+.room-code {
+  font-size: 28px;
+  letter-spacing: 3px;
+  font-weight: bold;
+  color: var(--blue);
+  background: #eef3fb;
+  padding: 10px;
+  border-radius: 10px;
+  margin: 10px 0;
+}
+
+.track {
+  background: #eaf0f8;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.track-top {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+}
+
+.road {
+  margin-top: 8px;
+  height: 40px;
+  border-bottom: 3px dashed #b6c5d9;
+  position: relative;
+}
+
+.car {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 28px;
+  transition: left .2s;
+}
+
+#raceText {
+  background: #f4f7fc;
+  padding: 18px;
+  border-radius: 12px;
+  font-size: 20px;
+  line-height: 1.8;
+  margin: 15px 0;
+}
+
+.correct { color: #16803d; }
+.incorrect { color: #dc2626; background: #ffe1e1; }
+.pending { color: #8795aa; }
+
+.player-list {
+  text-align: left;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 10px;
+  margin: 15px 0;
+}
+</style>
+</head>
+
+<body>
+<header>
+  <div class="logo">⚡ Turbo<span>Type</span></div>
+  <small>Carreras multijugador</small>
+</header>
+
+<main>
+  <!-- PANTALLA PRINCIPAL -->
+  <section id="home" class="panel center">
+    <h1>🏎️ ¡Carrera en Familia!</h1>
+    <p>Escribe tu nombre para comenzar:</p>
+    <input id="playerName" placeholder="Tu nombre o apodo..." maxlength="15">
+
+    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+      <button id="createRoomBtn" class="green">👑 Crear Sala</button>
+    </div>
+
+    <hr style="margin: 25px 0; border: 0; border-top: 1px solid #e2e8f0;">
+
+    <p>¿Tus amigos o familia ya crearon una sala? Pon el código aquí:</p>
+    <input id="joinCodeInput" placeholder="Ejemplo: 4829">
+    <button id="joinRoomBtn" class="secondary">🚀 Unirme a la Sala</button>
+
+    <p id="statusMsg" style="color: var(--blue); font-weight: bold; margin-top: 15px;"></p>
+  </section>
+
+  <!-- SALA DE ESPERA (LOBBY) -->
+  <section id="lobby" class="panel center hidden">
+    <h2>🏆 Sala de Espera</h2>
+    <p>Comparte este código con tu familia:</p>
+    <div id="displayRoomCode" class="room-code">----</div>
+
+    <div class="player-list">
+      <strong>Jugadores conectados:</strong>
+      <ul id="playerList"></ul>
+    </div>
+
+    <button id="startRaceBtn" class="green hidden">🚦 ¡Iniciar Carrera!</button>
+    <p id="lobbyWaitMsg">Esperando a que el anfitrión inicie...</p>
+  </section>
+
+  <!-- PISTA DE CARRERA -->
+  <section id="race" class="panel hidden">
+    <div class="center">
+      <h2 id="raceStatusTitle">🚦 ¡Prepárate!</h2>
+    </div>
+
+    <h3>🏎️ Pista en vivo</h3>
+    <div id="tracks"></div>
+
+    <h3>⌨️ Texto a escribir:</h3>
+    <div id="raceText"></div>
+    <textarea id="typingInput" placeholder="Escribe aquí cuando empiece la carrera..." disabled></textarea>
+  </section>
+
+  <!-- RESULTADOS -->
+  <section id="results" class="panel center hidden">
+    <h1>🏆 ¡Carrera Terminada!</h1>
+    <h2 id="winnerText"></h2>
+    <button onclick="location.reload()">🔄 Jugar otra vez</button>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const passages = [
+  "Los amigos verdaderos convierten cada aventura en un recuerdo inolvidable.",
+  "La velocidad y la concentracion te ayudan a llegar muy lejos en cada carrera.",
+  "Un pequeño dragon volaba sobre las montañas buscando un castillo fantastico."
+];
+
+let peer = null;
+let connections = [];
+let myId = "";
+let myName = "";
+let isHost = false;
+let roomCode = "";
+let players = {}; // { id: { name, progress, finished } }
+let currentText = "";
+let raceStarted = false;
+
+// 1. CREAR SALA (ANFITRIÓN)
+$("createRoomBtn").addEventListener("click", () => {
+  myName = $("playerName").value.trim();
+  if (!myName) return alert("Por favor escribe tu nombre.");
+
+  isHost = true;
+  roomCode = Math.floor(1000 + Math.random() * 9000).toString(); // Código de 4 dígitos
+  myId = "turbotype-" + roomCode;
+
+  peer = new Peer(myId);
+
+  peer.on("open", () => {
+    showSection("lobby");
+    $("displayRoomCode").textContent = roomCode;
+    $("startRaceBtn").classList.remove("hidden");
+    $("lobbyWaitMsg").classList.add("hidden");
+
+    players[myId] = { name: myName, progress: 0, finished: false };
+    updateLobbyUI();
+  });
+
+  peer.on("connection", conn => {
+    connections.push(conn);
+    
+    conn.on("data", data => {
+      handleData(data, conn);
+    });
+
+    conn.on("close", () => {
+      delete players[conn.peer];
+      broadcast({ type: "UPDATE_PLAYERS", players });
+      updateLobbyUI();
+    });
+  });
+
+  peer.on("error", err => {
+    alert("El código ya está en uso, intenta de nuevo.");
+  });
+});
+
+// 2. UNIRSE A UNA SALA (JUGADOR)
+$("joinRoomBtn").addEventListener("click", () => {
+  myName = $("playerName").value.trim();
+  const code = $("joinCodeInput").value.trim();
+
+  if (!myName || !code) return alert("Escribe tu nombre y el código de la sala.");
+
+  isHost = false;
+  peer = new Peer();
+
+  peer.on("open", () => {
+    const hostId = "turbotype-" + code;
+    const conn = peer.connect(hostId);
+
+    conn.on("open", () => {
+      connections.push(conn);
+      showSection("lobby");
+      $("displayRoomCode").textContent = code;
+      
+      // Enviar mi nombre al anfitrión
+      conn.send({ type: "JOIN", name: myName });
+    });
+
+    conn.on("data", data => {
+      handleData(data, conn);
+    });
+
+    conn.on("error", () => {
+      alert("No se pudo encontrar la sala. Revisa el código.");
+    });
+  });
+});
+
+// MANEJO DE MENSAJES ENTRE COMPUTADORAS
+function handleData(data, conn) {
+  if (data.type === "JOIN" && isHost) {
+    players[conn.peer] = { name: data.name, progress: 0, finished: false };
+    broadcast({ type: "UPDATE_PLAYERS", players });
+    updateLobbyUI();
+  }
+
+  if (data.type === "UPDATE_PLAYERS") {
+    players = data.players;
+    updateLobbyUI();
+  }
+
+  if (data.type === "START_RACE") {
+    currentText = data.text;
+    startRaceUI();
+  }
+
+  if (data.type === "PROGRESS" && isHost) {
+    if (players[conn.peer]) {
+      players[conn.peer].progress = data.progress;
+      players[conn.peer].finished = data.finished;
+    }
+    broadcast({ type: "UPDATE_RACE", players });
+    renderTracks();
+    checkWinner();
+  }
+
+  if (data.type === "UPDATE_RACE") {
+    players = data.players;
+    renderTracks();
+  }
+
+  if (data.type === "FINISH_RACE") {
+    showResults(data.winner);
+  }
+}
+
+function broadcast(data) {
+  connections.forEach(c => c.send(data));
+}
+
+function updateLobbyUI() {
+  const list = $("playerList");
+  list.innerHTML = "";
+  Object.values(players).forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = "🏎️ " + p.name;
+    list.appendChild(li);
+  });
+}
+
+// 3. INICIAR CARRERA
+$("startRaceBtn").addEventListener("click", () => {
+  if (!isHost) return;
+  currentText = passages[Math.floor(Math.random() * passages.length)];
+  broadcast({ type: "START_RACE", text: currentText });
+  startRaceUI();
+});
+
+function startRaceUI() {
+  showSection("race");
+  renderRaceText();
+  renderTracks();
+
+  let count = 3;
+  const timer = setInterval(() => {
+    if (count > 0) {
+      $("raceStatusTitle").textContent = "🚦 " + count;
+      count--;
+    } else {
+      clearInterval(timer);
+      $("raceStatusTitle").textContent = "🏁 ¡A ESCRIBIR!";
+      $("typingInput").disabled = false;
+      $("typingInput").focus();
+      raceStarted = true;
+    }
+  }, 1000);
+}
+
+function renderRaceText() {
+  const container = $("raceText");
+  container.innerHTML = "";
+  for (let char of currentText) {
+    const span = document.createElement("span");
+    span.textContent = char;
+    span.className = "pending";
+    container.appendChild(span);
+  }
+}
+
+// DIBUJAR LAS PISTAS Y AUTOS DE TODOS
+function renderTracks() {
+  const container = $("tracks");
+  container.innerHTML = "";
+
+  Object.values(players).forEach(p => {
+    const track = document.createElement("div");
+    track.className = "track";
+
+    const top = document.createElement("div");
+    top.className = "track-top";
+    top.innerHTML = `<span>${p.name}</span><span>${p.progress}%</span>`;
+
+    const road = document.createElement("div");
+    road.className = "road";
+
+    const car = document.createElement("span");
+    car.className = "car";
+    car.textContent = p.finished ? "🏆" : "🏎️";
+    car.style.left = `calc(${Math.min(100, p.progress)}% - 24px)`;
+
+    road.appendChild(car);
+    track.appendChild(top);
+    track.appendChild(road);
+    container.appendChild(track);
+  });
+}
+
+// EVALUAR ESCRITURA
+$("typingInput").addEventListener("input", () => {
+  if (!raceStarted) return;
+
+  const input = $("typingInput").value;
+  const spans = $("raceText").children;
+  let correctChars = 0;
+
+  for (let i = 0; i < spans.length; i++) {
+    if (i < input.length) {
+      if (input[i] === currentText[i]) {
+        spans[i].className = "correct";
+        correctChars++;
+      } else {
+        spans[i].className = "incorrect";
+      }
+    } else {
+      spans[i].className = "pending";
+    }
+  }
+
+  const progress = Math.round((correctChars / currentText.length) * 100);
+  const finished = correctChars === currentText.length;
+
+  if (isHost) {
+    players[myId].progress = progress;
+    players[myId].finished = finished;
+    broadcast({ type: "UPDATE_RACE", players });
+    renderTracks();
+    checkWinner();
+  } else {
+    connections[0].send({ type: "PROGRESS", progress, finished });
+  }
+
+  if (finished) {
+    $("typingInput").disabled = true;
+  }
+});
+
+function checkWinner() {
+  if (!isHost) return;
+  const winner = Object.values(players).find(p => p.finished);
+  if (winner) {
+    broadcast({ type: "FINISH_RACE", winner: winner.name });
+    showResults(winner.name);
+  }
+}
+
+function showResults(winnerName) {
+  showSection("results");
+  $("winnerText").textContent = `🎉 ¡Ganador: ${winnerName}!`;
+}
+
+function showSection(id) {
+  ["home", "lobby", "race", "results"].forEach(sec => {
+    $(sec).classList.toggle("hidden", sec !== id);
+  });
+}
+</script>
+</body>
+</html>
